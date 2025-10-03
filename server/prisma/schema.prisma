@@ -1,0 +1,302 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+enum Highlight {
+  HighSpeedInternetAccess
+  WasherDryer
+  AirConditioning
+  Heating
+  SmokeFree
+  CableReady
+  SatelliteTV
+  DoubleVanities
+  TubShower
+  Intercom
+  SprinklerSystem
+  RecentlyRenovated
+  CloseToTransit
+  GreatView
+  QuietNeighborhood
+}
+
+enum Amenity {
+  WasherDryer
+  AirConditioning
+  Dishwasher
+  HighSpeedInternet
+  HardwoodFloors
+  WalkInClosets
+  Microwave
+  Refrigerator
+  Pool
+  Gym
+  Parking
+  PetsAllowed
+  WiFi
+}
+
+enum PropertyType {
+  Rooms
+  Apartment
+  Mess
+  Sublet
+}
+
+enum ApplicationStatus {
+  Pending
+  Tour_Scheduled
+  Tour_Completed
+  Approved
+  Denied
+  Active_Lease
+}
+
+enum TourStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  Pending
+  Paid
+  PartiallyPaid
+  Overdue
+}
+
+enum SafetyLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum GenderPreference {
+  MaleOnly
+  FemaleOnly
+  Mixed
+}
+
+enum NIDStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum ReviewType {
+  TENANT_TO_LANDLORD
+  LANDLORD_TO_TENANT
+}
+
+enum TerminationStatus {
+  PENDING
+  APPROVED
+  DENIED
+}
+
+enum LeaseStatus {
+  ACTIVE
+  TERMINATED
+  PENDING_START
+}
+
+model Admin {
+  id          Int     @id @default(autoincrement())
+  cognitoId   String  @unique
+  name        String
+  email       String
+  phoneNumber String
+  superUser   Boolean @default(true)
+}
+
+model Landlord {
+  id                Int        @id @default(autoincrement())
+  cognitoId         String     @unique
+  name              String
+  email             String
+  phoneNumber       String
+  nidNumber         String?
+  address           String?
+  latitude          Float?
+  longitude         Float?
+  nidDocumentUrl    String?
+  addressProofUrl   String?
+  nidStatus         NIDStatus  @default(PENDING)
+  verifiedAt        DateTime?
+  rejectedAt        DateTime?
+  adminNotes        String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @default(now()) @updatedAt
+  properties        Property[]
+  reviews           Review[]   @relation("LandlordReviews")
+}
+
+model Tenant {
+  id          Int    @id @default(autoincrement())
+  cognitoId   String @unique
+  name        String
+  email       String
+  phoneNumber String
+
+  properties   Property[]    @relation("TenantProperties")
+  favorites    Property[]    @relation("TenantFavorites")
+  applications Application[]
+  leases       Lease[]
+  reviews      Review[]      @relation("TenantReviews")
+}
+
+model Property {
+  id                 Int               @id @default(autoincrement())
+  name               String
+  description        String
+  pricePerMonth      Float
+  securityDeposit    Float
+  photoUrls          String[]
+  amenities          Amenity[]
+  highlights         Highlight[]
+  isPetsAllowed      Boolean           @default(false)
+  isParkingIncluded  Boolean           @default(false)
+  isBachelorFriendly Boolean           @default(true)
+  isFemaleOnly       Boolean           @default(false)
+  genderPreference   GenderPreference? // optional filter
+  beds               Int
+  baths              Float
+  squareFeet         Int
+  propertyType       PropertyType
+  postedDate         DateTime          @default(now())
+  averageRating      Float?            @default(0)
+  numberOfReviews    Int?              @default(0)
+  locationId         Int
+  landlordCognitoId  String
+  location           Location          @relation(fields: [locationId], references: [id])
+  landlord           Landlord          @relation(fields: [landlordCognitoId], references: [cognitoId])
+  leases             Lease[]
+  applications       Application[]
+  favoritedBy        Tenant[]          @relation("TenantFavorites")
+  tenants            Tenant[]          @relation("TenantProperties")
+}
+
+
+model Location {
+  id          Int                                   @id @default(autoincrement())
+  address     String
+  city        String
+  state       String
+  country     String
+  postalCode  String
+  coordinates Unsupported("geography(Point, 4326)")
+
+  properties       Property[]
+  safetyIndicators SafetyIndicator[]
+  reviews          Review[]          @relation("LocationReviews")
+}
+
+model Application {
+  id              Int               @id @default(autoincrement())
+  applicationDate DateTime
+  status          ApplicationStatus
+  propertyId      Int
+  tenantCognitoId String
+  name            String
+  email           String
+  phoneNumber     String
+  message         String?
+  leaseId         Int?              @unique
+
+  property Property @relation(fields: [propertyId], references: [id])
+  tenant   Tenant   @relation(fields: [tenantCognitoId], references: [cognitoId])
+  lease    Lease?   @relation(fields: [leaseId], references: [id])
+  tour     Tour?
+}
+
+model Tour {
+  id               Int        @id @default(autoincrement())
+  applicationId    Int        @unique
+  scheduledDate    DateTime
+  status           TourStatus @default(SCHEDULED)
+  landlordNotes    String?
+  tenantNotes      String?
+  feedbackRating   Int?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id])
+}
+
+model Lease {
+  id                   Int                  @id @default(autoincrement())
+  startDate            DateTime
+  endDate              DateTime?            // Made optional - null means ongoing lease
+  rent                 Float
+  deposit              Float
+  propertyId           Int
+  tenantCognitoId      String
+  status               LeaseStatus          @default(ACTIVE)
+  property             Property             @relation(fields: [propertyId], references: [id])
+  tenant               Tenant               @relation(fields: [tenantCognitoId], references: [cognitoId])
+  application          Application?
+  payments             Payment[]
+  reviews              Review[]
+  terminationRequests  TerminationRequest[]
+}
+
+model Payment {
+  id            Int           @id @default(autoincrement())
+  amountDue     Float
+  amountPaid    Float
+  dueDate       DateTime
+  paymentDate   DateTime
+  paymentStatus PaymentStatus
+  leaseId       Int
+
+  lease Lease @relation(fields: [leaseId], references: [id])
+}
+
+
+model Review {
+  id         Int        @id @default(autoincrement())
+  rating     Int        @default(0)
+  comment    String?
+  createdAt  DateTime   @default(now())
+  tenantId   Int
+  landlordId Int
+  locationId Int
+  leaseId    Int?
+  type       ReviewType?
+  tenant     Tenant     @relation("TenantReviews", fields: [tenantId], references: [id])
+  landlord   Landlord   @relation("LandlordReviews", fields: [landlordId], references: [id])
+  location   Location   @relation("LocationReviews", fields: [locationId], references: [id])
+  lease      Lease?     @relation(fields: [leaseId], references: [id])
+}
+
+model SafetyIndicator {
+  id         Int         @id @default(autoincrement())
+  level      SafetyLevel
+  reason     String
+  updatedAt  DateTime    @default(now())
+  locationId Int
+
+  location Location @relation(fields: [locationId], references: [id])
+}
+
+model TerminationRequest {
+  id              Int               @id @default(autoincrement())
+  leaseId         Int
+  reason          String?
+  requestDate     DateTime          @default(now())
+  status          TerminationStatus @default(PENDING)
+  landlordNotes   String?
+  processedDate   DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  lease Lease @relation(fields: [leaseId], references: [id])
+}
